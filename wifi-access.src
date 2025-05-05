@@ -13,6 +13,7 @@ networks = computer.wifi_networks(params[0])
 
 if networks == null then exit(command_info("iwlist_usage"))
 
+// Figure out which network to use
 maxPower = 0
 maxBSSID = ""
 maxESSID = ""
@@ -33,3 +34,13 @@ for network in networks
 end for
 
 print("Using Network " + maxESSID + " with power: " + maxPower + " and BSSID: " + maxBSSID)
+
+// Start capturing packets
+maxAcks = 30000 / (maxPower + 15)
+print("Estimated acks needed: " + maxAcks)
+
+err = cryptools.aireplay(maxBSSID, maxESSID, maxAcks)
+if err then exit("Error: aireplay failed with error code " + err)
+print("aireplay finished successfully and saved to file.cap")
+
+// Now crack the file
