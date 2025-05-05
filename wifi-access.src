@@ -1,0 +1,35 @@
+if params.len != 1 or params[0] == "-h" or params[0] == "--help" then exit(command_info("iwlist_usage"))	
+
+cryptools = include_lib("/lib/crypto.so")
+if not cryptools then exit("Error: Missing crypto library")
+
+computer = get_shell.host_computer
+devices = computer.network_devices
+
+if devices == null or devices.indexOf(params[0]) == null then exit("iwlist: Network device not found")
+if params[0].indexOf("eth") != null then exit("iwlist: ethernet cards not supported for this command")
+
+networks = computer.wifi_networks(params[0])
+
+if networks == null then exit(command_info("iwlist_usage"))
+
+maxPower = 0
+maxBSSID = ""
+maxESSID = ""
+
+info = "BSSID PWR ESSID"
+for network in networks
+	info = info + "\n" + network
+    parts = network.split(" ")
+	powerStr = parts[1]
+    powerStr = slice(powerStr, 0, powerStr.len - 1)
+    power = val(powerStr)
+
+	if power > maxPower then 
+        maxPower = power
+        maxBSSID = parts[0]
+        maxESSID = parts[2]
+    end if
+end for
+
+print("Using Network " + maxESSID + " with power: " + maxPower + " and BSSID: " + maxBSSID)
