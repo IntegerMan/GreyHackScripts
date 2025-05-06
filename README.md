@@ -15,4 +15,5 @@ See [https://documentation.greyscript.org/](https://documentation.greyscript.org
 
 The following scripts exist:
 
-- *wifi-access* - built to automatically gain access to the strongest WiFi node. Currently in development.
+- *wifi-access* - Uses the network adapter to locate, monitor, crack, and connect to the strongest WiFi signal
+

@@ -1,46 +1,91 @@
-if params.len != 1 or params[0] == "-h" or params[0] == "--help" then exit(command_info("iwlist_usage"))	
+if params.len == 1 and (params[0] == "-h" or params[0] == "--help") then exit("Usage: wifi-access [network device]")
 
 cryptools = include_lib("/lib/crypto.so")
 if not cryptools then exit("Error: Missing crypto library")
 
 computer = get_shell.host_computer
-devices = computer.network_devices
 
-if devices == null or devices.indexOf(params[0]) == null then exit("iwlist: Network device not found")
-if params[0].indexOf("eth") != null then exit("iwlist: ethernet cards not supported for this command")
+// Figure out the network device to use
+netDevice = null
+if params.len != 1 then
+	print "No network device specified, using first in monitor mode"
 
-networks = computer.wifi_networks(params[0])
+	devices = computer.network_devices.split("\n")
+	if devices == null then exit("No network devices found")
+    print "Found network devices: " + devices
 
-if networks == null then exit(command_info("iwlist_usage"))
+	fallbackDevice = null
+	for device in devices
+		parts = device.split(" ")
+        if parts.len != 3 then continue
+		if parts[2] == "True" then
+			netDevice = parts[0]
+			break
+		else
+			fallbackDevice = parts[0]
+		end if
+	end for
+
+	if netDevice == null then
+		if not fallbackDevice then exit("No network devices identified")
+		print "No network device in monitor mode, activating monitor mode on fallback device: " + fallbackDevice
+		result = cryptools.airmon("start", fallbackDevice)
+		if result != 0 then exit("Error: Failed to start monitor mode on " + fallbackDevice)
+		print "Started monitor mode on " + fallbackDevice
+		netDevice = fallbackDevice
+	end if
+else
+	netDevice = params[0]
+end if
+
+print "Using network device: " + netDevice
+print
 
 // Figure out which network to use
 maxPower = 0
 maxBSSID = ""
 maxESSID = ""
 
-info = "BSSID PWR ESSID"
+networks = computer.wifi_networks(netDevice)
 for network in networks
-	info = info + "\n" + network
-    parts = network.split(" ")
+	parts = network.split(" ")
 	powerStr = parts[1]
-    powerStr = slice(powerStr, 0, powerStr.len - 1)
-    power = val(powerStr)
+	powerStr = slice(powerStr, 0, powerStr.len - 1)
+	power = val(powerStr)
 
-	if power > maxPower then 
-        maxPower = power
-        maxBSSID = parts[0]
-        maxESSID = parts[2]
-    end if
+	if power > maxPower then
+		maxPower = power
+		maxBSSID = parts[0]
+		maxESSID = parts[2]
+	end if
 end for
 
-print("Using Network " + maxESSID + " with power: " + maxPower + " and BSSID: " + maxBSSID)
+print "Using Network " + maxESSID + " with power: " + maxPower + " and BSSID: " + maxBSSID
+print
 
 // Start capturing packets
-maxAcks = 30000 / (maxPower + 15)
-print("Estimated acks needed: " + maxAcks)
+maxAcks = ceil(300000 / (maxPower + 15))
+print "Estimated acks needed: " + maxAcks
 
+// TODO: It'd be nice to be able to specify the filename
 err = cryptools.aireplay(maxBSSID, maxESSID, maxAcks)
 if err then exit("Error: aireplay failed with error code " + err)
-print("aireplay finished successfully and saved to file.cap")
+print "aireplay finished successfully and saved to file.cap"
 
-// Now crack the file
+// Now crack the password
+file = get_shell.host_computer.File("file.cap")
+if file == null then exit("Cap file not found: "+pathFile)
+if not file.is_binary then exit("Cap file is not a binary file.")		
+if not file.has_permission("r") then exit("Cap file cannot be read")
+
+password = cryptools.aircrack(file.path)
+if password == null then exit("Failed to find a password")
+print "Password found: " + password
+print
+
+// TODO: Should this move the network out of monitor mode?
+
+// Connect to the WiFi network
+result = computer.connect_wifi(netDevice, maxBSSID, maxESSID, password)
+if result != 1 then exit("Error: Failed to connect to WiFi network")
+print "Connected to WiFi network: " + maxESSID
