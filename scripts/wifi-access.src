@@ -1,43 +1,23 @@
+import_code("wiz-net.src")
+
 if params.len == 1 and (params[0] == "-h" or params[0] == "--help") then exit("Usage: wifi-access [network device]")
 
 cryptools = include_lib("/lib/crypto.so")
 if not cryptools then exit("Error: Missing crypto library")
 
 computer = get_shell.host_computer
+if not computer then exit("Error: Missing host computer")
 
 // Figure out the network device to use
-netDevice = null
-if params.len != 1 then
+if params.len == 0 then
 	print "No network device specified, using first in monitor mode"
-
-	devices = computer.network_devices.split("\n")
-	if devices == null then exit("No network devices found")
-    print "Found network devices: " + devices
-
-	fallbackDevice = null
-	for device in devices
-		parts = device.split(" ")
-        if parts.len != 3 then continue
-		if parts[2] == "True" then
-			netDevice = parts[0]
-			break
-		else
-			fallbackDevice = parts[0]
-		end if
-	end for
-
-	if netDevice == null then
-		if not fallbackDevice then exit("No network devices identified")
-		print "No network device in monitor mode, activating monitor mode on fallback device: " + fallbackDevice
-		result = cryptools.airmon("start", fallbackDevice)
-		if result != 0 then exit("Error: Failed to start monitor mode on " + fallbackDevice)
-		print "Started monitor mode on " + fallbackDevice
-		netDevice = fallbackDevice
-	end if
+	netDevice = get_monitor_mode_network_device()
+else if params.len == 1 then
+	// Check if the network device is in monitor mode
+	netDevice = get_monitor_mode_network_device(params[0])
 else
-	netDevice = params[0]
+	exit("Invalid number of parameters")
 end if
-
 print "Using network device: " + netDevice
 print
 
@@ -72,6 +52,8 @@ err = cryptools.aireplay(maxBSSID, maxESSID, maxAcks)
 if err then exit("Error: aireplay failed with error code " + err)
 print "aireplay finished successfully and saved to file.cap"
 
+// TODO: Should this move the network out of monitor mode now that we have it?
+
 // Now crack the password
 file = get_shell.host_computer.File("file.cap")
 if file == null then exit("Cap file not found: "+pathFile)
@@ -83,7 +65,13 @@ if password == null then exit("Failed to find a password")
 print "Password found: " + password
 print
 
-// TODO: Should this move the network out of monitor mode?
+// Delete the file after use (WILL LEAVE A LOG!)
+result = file.delete()
+if result then 
+	print "Error: Failed to delete file.cap: " + result 
+else
+	print "Deleted file.cap. This will leave a log in the system."
+end if
 
 // Connect to the WiFi network
 result = computer.connect_wifi(netDevice, maxBSSID, maxESSID, password)

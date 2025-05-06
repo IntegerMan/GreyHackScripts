@@ -1,0 +1,34 @@
+get_monitor_mode_network_device = function(netDevice = null)
+	devices = computer.network_devices.split("\n")
+
+	// If no network device is specified, try to find one in monitor mode
+	if netDevice == null then
+		if devices == null then exit("No network devices found")
+		for device in devices
+			parts = device.split(" ")
+			if parts.len != 3 then continue
+			if parts[2] == "True" then
+				netDevice = parts[0]
+				break
+			end if
+		end for
+
+		// If no network device is found in monitor mode, use the first one
+		if netDevice == null then netDevice = devices[0].split(" ")[0]
+	end if
+
+	// Check if the network device is already in monitor mode
+	for device in devices
+		parts = device.split(" ")
+		if parts.len != 3 then continue
+		if parts[0] == netDevice and parts[2] == "False" then
+			print "Network device " + netDevice + " is not in monitor mode, activating it..."
+			result = cryptools.airmon("start", netDevice)
+			if result != 0 then exit("Error: Failed to start monitor mode on " + netDevice)
+			print "Started monitor mode on " + netDevice
+		end if
+	end for
+
+	// Get our first network device and try to activate monitor mode on it
+	return netDevice
+end function
